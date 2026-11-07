@@ -1,0 +1,8 @@
+# Build output (published as GitHub Release assets instead)
+*.exe
+*.zip
+release/
+*.tmp
+
+# Internal planning notes (contain local paths)
+docs/
