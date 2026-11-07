@@ -264,6 +264,7 @@ namespace UsageWidget
             Font = new Font("Segoe UI", 9f); BackColor = Color.FromArgb(14, 19, 29); ForeColor = Color.FromArgb(235, 240, 248);
             pinnedFont = new Font(Font, FontStyle.Bold);
             ClientSize = new Size(340, 232); FormBorderStyle = FormBorderStyle.FixedSingle;
+            try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (ArgumentException) { }
             MaximizeBox = false; StartPosition = FormStartPosition.Manual; DoubleBuffered = true;
             Opacity = 1.0;
             heading = AddLabel("SUBSCRIPTION USAGE", 18, 7, 200, 26, 8f, Color.FromArgb(164, 177, 199), false);

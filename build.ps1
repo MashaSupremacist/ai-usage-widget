@@ -4,7 +4,7 @@ $widgetCompiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\cs
 if (-not (Test-Path -LiteralPath $widgetCompiler)) { throw 'The Windows .NET Framework C# compiler was not found.' }
 $widgetSources = @('Usage.cs', 'Widget.cs', 'BackgroundCrop.cs', 'UsageCache.cs', 'Accounts.cs', 'AccountDialog.cs', 'Antigravity.cs', 'Cursor.cs') | ForEach-Object { Join-Path $PSScriptRoot $_ }
 $widgetReferences = @('/r:System.Web.Extensions.dll', '/r:System.Net.Http.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll', '/r:System.Management.dll', '/r:System.Security.dll')
-& $widgetCompiler /nologo /warnaserror /target:winexe /main:UsageWidget.Program "/win32manifest:$PSScriptRoot\app.manifest" "/out:$PSScriptRoot\AIUsageWidget.exe" @widgetReferences @widgetSources
+& $widgetCompiler /nologo /warnaserror /target:winexe /main:UsageWidget.Program "/win32manifest:$PSScriptRoot\app.manifest" "/win32icon:$PSScriptRoot\assets\app.ico" "/out:$PSScriptRoot\AIUsageWidget.exe" @widgetReferences @widgetSources
 if ($LASTEXITCODE -ne 0) { throw 'App compilation failed.' }
 if ($Test) {
     $widgetTestDirectory = Join-Path ([IO.Path]::GetTempPath()) ('AIUsageWidget-checks-' + [guid]::NewGuid().ToString('N'))

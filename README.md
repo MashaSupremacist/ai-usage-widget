@@ -1,6 +1,15 @@
+<p align="center"><img src="assets/icon.png" width="112" alt="AI Usage Widget icon"></p>
+
 # AI Usage Widget
 
 A tiny always-on-top Windows window that shows how much of your **Claude Code**, **Codex**, **Antigravity** and **Cursor** subscription limits you have left. It is portable, needs no installer, and has no cloud backend.
+
+<p align="center">
+  <img src="screenshots/widget.png" alt="The widget showing Claude and Codex limits" height="259">
+  &nbsp;
+  <img src="screenshots/widget-full.png" alt="All four providers: Claude, Codex, Antigravity and Cursor" height="543">
+</p>
+<p align="center"><sub>Left: the actual 340 × 232 window (it scrolls). Right: the full list of providers. Sample data.</sub></p>
 
 > Unofficial community tool. Not affiliated with or endorsed by Anthropic, OpenAI, Google or Anysphere (Cursor). Several of the usage endpoints it reads are internal and may change without notice.
 
@@ -34,6 +43,7 @@ Claude is orange, Codex blue, Antigravity teal and Cursor silver. Bars and numbe
 
 - **Pin:** keeps the window on top. Drag the title bar to move it.
 - **··· → Add account:** add another Claude Code or Codex login. These use the official CLI's own browser sign-in, each in its own profile folder. **Cursor (browser sign-in)** opens cursor.com, using the same PKCE sign-in as the Cursor app, so you don't need the Cursor app installed. **Antigravity (current sign-in)** uses the account already signed in to Antigravity.
+  <br><img src="screenshots/add-account.png" alt="Add account dialog with Cursor browser sign-in selected" width="352">
 - **Right-click an added account → Reconnect account:** use this when its sign-in expires.
 - **··· → Background settings:** choose a background image, crop and zoom it, and set its transparency. You can also refresh readings here.
 - Scroll with the mouse wheel or drag the thin scroll thumb.
