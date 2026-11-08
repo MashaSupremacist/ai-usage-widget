@@ -44,6 +44,8 @@ Claude is orange, Codex blue, Antigravity teal and Cursor silver. Bars and numbe
 - **Pin:** keeps the window on top. Drag the title bar to move it.
 - **··· → Add account:** add another Claude Code or Codex login. These use the official CLI's own browser sign-in, each in its own profile folder. **Cursor (browser sign-in)** opens cursor.com, using the same PKCE sign-in as the Cursor app, so you don't need the Cursor app installed. **Antigravity (current sign-in)** uses the account already signed in to Antigravity.
   <br><img src="screenshots/add-account.png" alt="Add account dialog with Cursor browser sign-in selected" width="352">
+- **Right-click any subscription → Move to top / Move up / Move down / Move to bottom:** reorder the list. The order is remembered.
+- **Right-click → Remove subscription:** hides an automatically detected row; bring it back with **··· → Show removed subscriptions**. For an account you added, it deletes the widget's saved sign-in for that account. It asks first.
 - **Right-click an added account → Reconnect account:** use this when its sign-in expires.
 - **··· → Background settings:** choose a background image, crop and zoom it, and set its transparency. You can also refresh readings here.
 - Scroll with the mouse wheel or drag the thin scroll thumb.

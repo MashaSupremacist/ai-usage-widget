@@ -19,6 +19,9 @@ namespace UsageWidget
         public bool Pinned;
         public string BackgroundPath;
         public int Left = Int32.MinValue, Top = Int32.MinValue;
+        // Row keys ("claude", "codex", "antigravity", "cursor", "account:<id>") in display order, and built-in rows the user removed.
+        public List<string> Order = new List<string>(), Hidden = new List<string>();
+        internal string FilePath = null;
         public static string Folder { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AIUsageWidget"); } }
         public static WidgetSettings Parse(string text)
         {
@@ -26,6 +29,8 @@ namespace UsageWidget
             {
                 var result = new JavaScriptSerializer().Deserialize<WidgetSettings>(text) ?? new WidgetSettings();
                 result.Transparency = Math.Max(0, Math.Min(100, result.Transparency));
+                result.Order = (result.Order ?? new List<string>()).Where(k => !String.IsNullOrEmpty(k)).Distinct().Take(256).ToList();
+                result.Hidden = (result.Hidden ?? new List<string>()).Where(k => !String.IsNullOrEmpty(k)).Distinct().Take(256).ToList();
                 return result;
             }
             catch (ArgumentException) { return new WidgetSettings(); }
@@ -55,8 +60,8 @@ namespace UsageWidget
         }
         public void Save()
         {
-            Directory.CreateDirectory(Folder);
-            string destination = Path.Combine(Folder, "settings.json"), temporary = destination + ".tmp";
+            string destination = FilePath ?? Path.Combine(Folder, "settings.json"), temporary = destination + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(destination));
             File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(this));
             ReplaceFile(temporary, destination);
         }
@@ -276,11 +281,20 @@ namespace UsageWidget
             var configure = new Button { Text = "···", FlatStyle = FlatStyle.Flat, Bounds = new Rectangle(289, 7, 34, 26), AccessibleName = "Widget settings", TabIndex = 1 };
             mainMenu.Items.Add("Add account", null, async delegate { await ShowAccountDialogAsync(null); });
             mainMenu.Items.Add("Background settings", null, delegate { ShowSettings(); });
+            var restore = mainMenu.Items.Add("Show removed subscriptions", null, delegate { ShowRemovedRows(); });
+            mainMenu.Opening += delegate { restore.Visible = settings.Hidden.Count > 0; };
             configure.ContextMenuStrip = mainMenu;
             configure.FlatAppearance.BorderSize = 0; configure.Click += delegate { mainMenu.Show(configure, new Point(0, configure.Height)); }; Controls.Add(configure);
             tips.SetToolTip(pin, "Keep this window above other windows"); tips.SetToolTip(configure, "Accounts and background settings");
             accounts = new AccountsPanel { Bounds = new Rectangle(0, 40, 340, 192), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, AccessibleName = "Accounts", TabIndex = 2 };
             accounts.Paint += PaintAccounts; accounts.ClientSizeChanged += delegate { LayoutMeters(); };
+            // Right-clicking the empty part of a card opens the same row menu as its labels and bars.
+            accounts.MouseUp += delegate(object sender, MouseEventArgs e) {
+                if (e.Button != MouseButtons.Right) return;
+                float y = (e.Y + accounts.ScrollY) / (DeviceDpi / 96f);
+                var row = providers.FirstOrDefault(v => v.HeightLogical > 0 && y >= v.TopLogical - 4 && y < v.TopLogical - 4 + v.HeightLogical);
+                if (row != null) row.AccountMenu.Show(accounts, e.Location);
+            };
             Controls.Add(accounts);
             claude = AddProvider(false, "CLAUDE", Orange, 4);
             codex = AddProvider(true, "CODEX", Blue, 114);
@@ -290,6 +304,7 @@ namespace UsageWidget
                 var cursor = AddProvider(false, "CURSOR", Silver, 0); cursor.Cursor = true;
                 cursor.CachePath = Path.Combine(WidgetSettings.Folder, "cursor-usage.json");
             }
+            ApplySavedOrder();
             if (!String.IsNullOrEmpty(settings.BackgroundPath))
             {
                 try { background = ReadImage(settings.BackgroundPath); }
@@ -301,16 +316,16 @@ namespace UsageWidget
                 }
             }
             Shown += async delegate {
-                try { foreach (var profile in AccountStore.Load()) AttachAccount(profile); }
+                try { foreach (var profile in AccountStore.Load(AccountStorePath)) AttachAccount(profile); }
                 catch (Exception e) {
                     if (!(e is IOException || e is InvalidDataException || e is UnauthorizedAccessException)) throw;
                     heading.AccessibleDescription = "Saved accounts could not be loaded"; tips.SetToolTip(heading, heading.AccessibleDescription);
                 }
-                LayoutMeters(); PlaceWindow(); timer.Start(); await Task.WhenAll(providers.Select(v => RefreshAsync(v, true)));
+                LayoutMeters(); PlaceWindow(); timer.Start(); await Task.WhenAll(ShownRows().Select(v => RefreshAsync(v, true)));
             };
             DpiChanged += delegate { LayoutMeters(); };
             ClientSizeChanged += delegate { ResetBackdrop(); };
-            timer.Tick += async delegate { foreach (var view in providers) Render(view); await Task.WhenAll(providers.Select(v => RefreshAsync(v, false))); };
+            timer.Tick += async delegate { var rows = ShownRows(); foreach (var view in rows) Render(view); await Task.WhenAll(rows.Select(v => RefreshAsync(v, false))); };
             FormClosing += async delegate(object sender, FormClosingEventArgs e)
             {
                 if (closeReady) return;
@@ -335,10 +350,79 @@ namespace UsageWidget
             var view = AddProvider(source.Codex, source.Cursor ? "CURSOR" : source.Codex ? "CODEX" : "CLAUDE", source.Cursor ? Silver : source.Codex ? Blue : Orange, 0);
             view.Cursor = source.Cursor;
             view.Source = source; view.CachePath = source.CachePath;
-            view.AccountMenu = new ContextMenuStrip();
-            view.AccountMenu.Items.Add("Reconnect account", null, async delegate { await ShowAccountDialogAsync(source); });
-            foreach (var control in new Control[] { view.Logo, view.Title, view.Plan, view.Account, view.FiveHour, view.Weekly, view.FiveText, view.WeekText, view.FiveLabel, view.WeekLabel }) control.ContextMenuStrip = view.AccountMenu;
-            LayoutMeters(); return view;
+            view.AccountMenu.Items.Insert(0, new ToolStripSeparator());
+            view.AccountMenu.Items.Insert(0, new ToolStripMenuItem("Reconnect account", null, async delegate { await ShowAccountDialogAsync(source); }));
+            ApplySavedOrder(); LayoutMeters(); return view;
+        }
+        internal string AccountStorePath = null;
+        static string RowKey(ProviderView view) { return view.Source != null ? "account:" + view.Source.Id : view.Antigravity ? "antigravity" : view.Cursor ? "cursor" : view.Codex ? "codex" : "claude"; }
+        bool IsHidden(ProviderView view) { return settings.Hidden.Contains(RowKey(view)); }
+        List<ProviderView> ShownRows() { return providers.Where(v => !IsHidden(v)).ToList(); }
+        static IEnumerable<Control> RowControls(ProviderView view)
+        {
+            var fixedControls = new Control[] { view.Logo, view.Title, view.Plan, view.Account, view.FiveHour, view.Weekly, view.FiveText, view.WeekText, view.FiveLabel, view.WeekLabel };
+            return fixedControls.Concat(view.Lanes.SelectMany(l => new Control[] { l.Name, l.Text, l.Meter }));
+        }
+        void ApplySavedOrder()
+        {
+            // Rows not in the saved order (e.g. a newly added account) keep their place after the ordered ones.
+            var sorted = providers.Select((v, i) => new { v, i, k = settings.Order.IndexOf(RowKey(v)) })
+                .OrderBy(x => x.k < 0 ? Int32.MaxValue : x.k).ThenBy(x => x.i).Select(x => x.v).ToList();
+            providers.Clear(); providers.AddRange(sorted);
+        }
+        void RowsChanged()
+        {
+            settings.Order = providers.Select(RowKey).ToList(); SaveSettings();
+            LayoutMeters(); accounts.Invalidate(true);
+        }
+        // delta: -1 up, +1 down, Int32.MinValue to the top, Int32.MaxValue to the bottom. Hidden rows keep no position.
+        void MoveRow(ProviderView view, int delta)
+        {
+            var shown = ShownRows(); int from = shown.IndexOf(view); if (from < 0) return;
+            int to = delta == Int32.MinValue ? 0 : delta == Int32.MaxValue ? shown.Count - 1 : Math.Max(0, Math.Min(shown.Count - 1, from + delta));
+            if (to == from) return;
+            shown.RemoveAt(from); shown.Insert(to, view);
+            var hidden = providers.Where(IsHidden).ToList();
+            providers.Clear(); providers.AddRange(shown); providers.AddRange(hidden);
+            RowsChanged();
+            accounts.ScrollTo((view.TopLogical - 4) * DeviceDpi / 96f);
+        }
+        async Task RemoveRowAsync(ProviderView view, bool confirm)
+        {
+            if (closing || !providers.Contains(view)) return;
+            string name = view.Title.Text + (String.IsNullOrEmpty(view.Account.Text) ? "" : " · " + view.Account.Text);
+            if (confirm)
+            {
+                string text = view.Source != null
+                    ? "Remove " + name + " from the widget?\n\nThe widget's saved sign-in for this account is deleted. This cannot be undone, but you can add the account again later."
+                    : "Remove " + name + " from the widget?\n\nYou can bring it back from ··· → Show removed subscriptions.";
+                if (MessageBox.Show(this, text, "Remove subscription", MessageBoxButtons.OKCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+            }
+            if (view.Source == null)
+            {
+                settings.Hidden.Add(RowKey(view)); RowsChanged(); return;
+            }
+            providers.Remove(view); RowsChanged();
+            try { await view.ActiveTask; }
+            catch (Exception) { /* The row is gone; its last refresh result no longer matters. */ }
+            foreach (var control in RowControls(view).ToList()) control.Dispose();
+            view.AccountMenu.Dispose();
+            try
+            {
+                AccountStore.Save(AccountStore.Load(AccountStorePath).Where(p => p.Id != view.Source.Id), AccountStorePath);
+                if (Directory.Exists(view.Source.ConfigDirectory)) Directory.Delete(view.Source.ConfigDirectory, true);
+            }
+            catch (Exception e)
+            {
+                if (!(e is IOException || e is InvalidDataException || e is UnauthorizedAccessException)) throw;
+                heading.AccessibleDescription = "The removed account's files could not all be deleted"; tips.SetToolTip(heading, heading.AccessibleDescription);
+            }
+        }
+        void ShowRemovedRows()
+        {
+            var restored = providers.Where(IsHidden).ToList();
+            settings.Hidden.Clear(); RowsChanged();
+            foreach (var view in restored) { var task = RefreshAsync(view, true); }
         }
         async Task ShowAccountDialogAsync(AccountProfile source)
         {
@@ -391,6 +475,18 @@ namespace UsageWidget
             view.FiveText = AddLabel("—", 240, y + 38, 77, 20, 9f, ForeColor, true, accounts);
             view.WeekText = AddLabel("—", 240, y + 66, 77, 20, 9f, ForeColor, true, accounts);
             view.FiveText.TextAlign = view.WeekText.TextAlign = ContentAlignment.TopRight;
+            view.AccountMenu = new ContextMenuStrip();
+            var toTop = view.AccountMenu.Items.Add("Move to top", null, delegate { MoveRow(view, Int32.MinValue); });
+            var up = view.AccountMenu.Items.Add("Move up", null, delegate { MoveRow(view, -1); });
+            var down = view.AccountMenu.Items.Add("Move down", null, delegate { MoveRow(view, 1); });
+            var toBottom = view.AccountMenu.Items.Add("Move to bottom", null, delegate { MoveRow(view, Int32.MaxValue); });
+            view.AccountMenu.Items.Add(new ToolStripSeparator());
+            view.AccountMenu.Items.Add("Remove subscription", null, async delegate { await RemoveRowAsync(view, true); });
+            view.AccountMenu.Opening += delegate {
+                var shown = ShownRows(); int index = shown.IndexOf(view);
+                toTop.Enabled = up.Enabled = index > 0; down.Enabled = toBottom.Enabled = index >= 0 && index < shown.Count - 1;
+            };
+            foreach (var control in RowControls(view)) control.ContextMenuStrip = view.AccountMenu;
             providers.Add(view); return view;
         }
         void PlaceWindow()
@@ -449,6 +545,7 @@ namespace UsageWidget
                     Meter = new MeterBar { FillColor = view.Antigravity ? Teal : view.Cursor ? Silver : view.Codex ? Blue : Orange }
                 };
                 lane.Text.TextAlign = ContentAlignment.TopRight; accounts.Controls.Add(lane.Meter); view.Lanes.Add(lane);
+                lane.Name.ContextMenuStrip = lane.Text.ContextMenuStrip = lane.Meter.ContextMenuStrip = view.AccountMenu;
             }
             for (int i = 0; i < lanes.Count; i++) {
                 view.Lanes[i].Name.Text = lanes[i].Label; view.Lanes[i].Meter.AccessibleName = view.Title.Text + " " + lanes[i].Label + " remaining";
@@ -466,6 +563,12 @@ namespace UsageWidget
             int top = 4, oldHeight = accounts.ContentHeight;
             foreach (var view in providers)
             {
+                if (IsHidden(view))
+                {
+                    view.HeightLogical = 0;
+                    foreach (var control in RowControls(view)) control.Visible = false;
+                    continue;
+                }
                 var snapshot = view.State.Snapshot;
                 bool five = !view.Custom && (snapshot == null || snapshot.FiveHour != null), week = !view.Custom && (snapshot == null || snapshot.Weekly != null);
                 var lanes = CustomLanes(view); SyncLaneViews(view, lanes);
@@ -481,7 +584,10 @@ namespace UsageWidget
             {
                 var snapshot = view.State.Snapshot;
                 bool five = !view.Custom && (snapshot == null || snapshot.FiveHour != null), week = !view.Custom && (snapshot == null || snapshot.Weekly != null);
+                if (IsHidden(view)) continue;
                 top = view.TopLogical; int row = top + 38;
+                view.Logo.Visible = view.Title.Visible = view.Account.Visible = true;
+                foreach (var lane in view.Lanes) lane.Name.Visible = lane.Text.Visible = lane.Meter.Visible = true;
                 view.Logo.SetBounds(px(24), py(top + 6), px(21), px(21));
                 int titleWidth = Math.Min(px(78), TextRenderer.MeasureText(view.Title.Text, view.Title.Font).Width + px(2));
                 view.Title.SetBounds(px(54), py(top + 5), titleWidth, px(23));
@@ -707,7 +813,7 @@ namespace UsageWidget
                 choose.Click += delegate { ChooseBackground(); };
                 remove.Click += delegate { if (background != null) background.Dispose(); background = null; settings.BackgroundPath = null; ResetBackdrop(); SaveSettings(); };
                 slider.ValueChanged += delegate { ApplyTransparency(slider.Value); caption.Text = "Background transparency: " + settings.Transparency + "%"; };
-                refresh.Click += async delegate { await Task.WhenAll(providers.Select(v => RefreshAsync(v, true))); };
+                refresh.Click += async delegate { await Task.WhenAll(ShownRows().Select(v => RefreshAsync(v, true))); };
                 dialog.ShowDialog(this); SaveSettings();
             }
         }

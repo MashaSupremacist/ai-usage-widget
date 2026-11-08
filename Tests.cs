@@ -391,9 +391,48 @@ namespace UsageWidget
                 using (var form = new WidgetForm(new WidgetSettings())) {
                     var button = Descendants(form).OfType<Button>().Single(b => b.AccessibleName == "Widget settings");
                     Check(button.ContextMenuStrip != null, "Three dots still opens the background panel directly");
+                    Check(button.Text == "···", "Three-dot label is garbled (source encoding)");
                     var labels = button.ContextMenuStrip.Items.Cast<ToolStripItem>().Select(i => i.Text).ToArray();
-                    Check(labels.SequenceEqual(new[] { "Add account", "Background settings" }), "Required menu choices are missing");
+                    Check(labels.Take(2).SequenceEqual(new[] { "Add account", "Background settings" }), "Required menu choices are missing");
                 }
+            });
+            Run("rows can be reordered, removed and restored, and the layout persists", () => {
+                var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                string folder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "row-fixture-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
+                try {
+                string settingsPath = Path.Combine(folder, "settings.json"), storePath = Path.Combine(folder, "accounts.json");
+                Func<object, string, object> field = (target, name) => target.GetType().GetField(name, flags | System.Reflection.BindingFlags.Public).GetValue(target);
+                using (var form = new WidgetForm(new WidgetSettings { FilePath = settingsPath })) {
+                    typeof(WidgetForm).GetField("AccountStorePath", flags).SetValue(form, storePath);
+                    var providers = (System.Collections.IList)field(form, "providers");
+                    object claude = field(form, "claude"), codex = field(form, "codex");
+                    var menuLabels = ((ContextMenuStrip)field(claude, "AccountMenu")).Items.Cast<ToolStripItem>().Select(i => i.Text).ToArray();
+                    Check(new[] { "Move to top", "Move up", "Move down", "Move to bottom", "Remove subscription" }.All(menuLabels.Contains), "Row menu lacks move/remove choices");
+                    var move = typeof(WidgetForm).GetMethod("MoveRow", flags);
+                    move.Invoke(form, new object[] { codex, Int32.MinValue });
+                    Check(providers[0] == codex && (int)field(codex, "TopLogical") < (int)field(claude, "TopLogical"), "Move to top did not move the row up");
+                    var saved = WidgetSettings.Parse(File.ReadAllText(settingsPath));
+                    Check(saved.Order.Count > 1 && saved.Order[0] == "codex" && saved.Order[1] == "claude", "Order was not saved");
+                    move.Invoke(form, new object[] { codex, 1 });
+                    Check(providers[0] == claude && providers[1] == codex, "Move down did not swap with the next row");
+                    var remove = typeof(WidgetForm).GetMethod("RemoveRowAsync", flags);
+                    ((Task)remove.Invoke(form, new object[] { claude, false })).GetAwaiter().GetResult();
+                    Check((int)field(claude, "HeightLogical") == 0 && (int)field(codex, "TopLogical") == 4, "Removed built-in row still takes space");
+                    Check(WidgetSettings.Parse(File.ReadAllText(settingsPath)).Hidden.Contains("claude"), "Removed row was not saved");
+                    typeof(WidgetForm).GetMethod("ShowRemovedRows", flags).Invoke(form, null);
+                    Check((int)field(claude, "HeightLogical") > 0 && WidgetSettings.Parse(File.ReadAllText(settingsPath)).Hidden.Count == 0, "Removed row could not be restored");
+                    var profile = AccountProfile.Create(false); AccountStore.Save(new[] { profile }, storePath);
+                    var extra = typeof(WidgetForm).GetMethod("AttachAccount", flags).Invoke(form, new object[] { profile });
+                    Check(((ContextMenuStrip)field(extra, "AccountMenu")).Items[0].Text == "Reconnect account", "Added account lost Reconnect");
+                    ((Task)remove.Invoke(form, new object[] { extra, false })).GetAwaiter().GetResult();
+                    Check(!providers.Contains(extra) && AccountStore.Load(storePath).Count == 0, "Removed added account was kept");
+                    move.Invoke(form, new object[] { codex, Int32.MinValue });
+                }
+                using (var reopened = new WidgetForm(WidgetSettings.Parse(File.ReadAllText(settingsPath)))) {
+                    var providers = (System.Collections.IList)field(reopened, "providers");
+                    Check(providers[0] == field(reopened, "codex") && providers[1] == field(reopened, "claude"), "Saved order was not applied on start");
+                }
+                } finally { Directory.Delete(folder, true); }
             });
             Run("active Pin uses readable bold white text on dark blue", () => {
                 foreach (bool pinned in new[] { false, true }) {
