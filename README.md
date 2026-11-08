@@ -9,7 +9,7 @@ A tiny always-on-top Windows window that shows how much of your **Claude Code**,
   &nbsp;
   <img src="screenshots/widget-full.png" alt="All four providers: Claude, Codex, Antigravity and Cursor" height="543">
 </p>
-<p align="center"><sub>Left: the actual 340 × 232 window (it scrolls). Right: the full list of providers. Sample data.</sub></p>
+<p align="center"><sub>Left: the compact window (it scrolls). Right: the full list of providers. Sample data.</sub></p>
 
 > Unofficial community tool. Not affiliated with or endorsed by Anthropic, OpenAI, Google or Anysphere (Cursor). Several of the usage endpoints it reads are internal and may change without notice.
 

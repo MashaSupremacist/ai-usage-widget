@@ -183,7 +183,7 @@ namespace UsageWidget
                     foreach (bool codex in new[] { false, true })
                         form.ShowUsage(codex, new UsageSnapshot { Weekly = new UsageWindow { Used = 30 } }, Now);
                     Size window = form.ClientSize;
-                    Check(window == new Size(340 * form.DeviceDpi / 96, 232 * form.DeviceDpi / 96), "Current compact window size changed");
+                    Check(window == new Size(340 * form.DeviceDpi / 96, 256 * form.DeviceDpi / 96), "Current compact window size changed");
                     typeof(WidgetForm).GetMethod("AddProvider", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(form, new object[] { true, "EXTRA", Color.Blue, 0 });
                     form.ShowUsage(true, new UsageSnapshot { Weekly = new UsageWindow { Used = 30 } }, Now);
                     var list = Descendants(form).OfType<AccountsPanel>().Single();
@@ -528,7 +528,7 @@ namespace UsageWidget
                     var meters = Descendants(form).OfType<MeterBar>().Where(m => m.AccessibleName.StartsWith("AGY ") && !m.AccessibleName.Contains("five-hour") && !m.AccessibleName.Contains("weekly")).ToArray();
                     Check(meters.Length == 4 && meters.Select(m => m.Value.Value).SequenceEqual(new[] { 80.0, 60.0, 40.0, 20.0 }), "AGY pools do not have independent remaining bars");
                     var list = Descendants(form).OfType<AccountsPanel>().Single();
-                    Check(list.ContentHeight > list.Height && form.ClientSize == new Size(340 * form.DeviceDpi / 96, 232 * form.DeviceDpi / 96), "Three providers do not scroll in the fixed window");
+                    Check(list.ContentHeight > list.Height && form.ClientSize == new Size(340 * form.DeviceDpi / 96, 256 * form.DeviceDpi / 96), "Three providers do not scroll in the fixed window");
                 }
             });
             Run("an added Cursor account gets its own monthly row", () => {

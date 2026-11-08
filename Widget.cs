@@ -268,7 +268,7 @@ namespace UsageWidget
             AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi;
             Font = new Font("Segoe UI", 9f); BackColor = Color.FromArgb(14, 19, 29); ForeColor = Color.FromArgb(235, 240, 248);
             pinnedFont = new Font(Font, FontStyle.Bold);
-            ClientSize = new Size(340, 232); FormBorderStyle = FormBorderStyle.FixedSingle;
+            ClientSize = new Size(340, 256); FormBorderStyle = FormBorderStyle.FixedSingle;
             try { Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (ArgumentException) { }
             MaximizeBox = false; StartPosition = FormStartPosition.Manual; DoubleBuffered = true;
             Opacity = 1.0;
@@ -286,7 +286,7 @@ namespace UsageWidget
             configure.ContextMenuStrip = mainMenu;
             configure.FlatAppearance.BorderSize = 0; configure.Click += delegate { mainMenu.Show(configure, new Point(0, configure.Height)); }; Controls.Add(configure);
             tips.SetToolTip(pin, "Keep this window above other windows"); tips.SetToolTip(configure, "Accounts and background settings");
-            accounts = new AccountsPanel { Bounds = new Rectangle(0, 40, 340, 192), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, AccessibleName = "Accounts", TabIndex = 2 };
+            accounts = new AccountsPanel { Bounds = new Rectangle(0, 40, 340, 216), Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, AccessibleName = "Accounts", TabIndex = 2 };
             accounts.Paint += PaintAccounts; accounts.ClientSizeChanged += delegate { LayoutMeters(); };
             // Right-clicking the empty part of a card opens the same row menu as its labels and bars.
             accounts.MouseUp += delegate(object sender, MouseEventArgs e) {
