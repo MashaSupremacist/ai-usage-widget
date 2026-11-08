@@ -247,6 +247,41 @@ namespace UsageWidget
             }
             return result;
         }
+        static readonly Dictionary<string, DateTimeOffset> RenewNotBefore = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+        internal static Action<ProcessStartInfo> RunRenewal = RunHidden;
+        // Claude's access token lasts about 8 hours. Claude Code renews it (and rewrites its own sign-in file) whenever it
+        // starts, including for `claude auth status`, which makes no model request. The widget never writes that file itself.
+        public static Credentials ReadClaudeCredentials(string configDirectory)
+        {
+            var credentials = ReadCredentials(false, configDirectory);
+            var now = DateTimeOffset.UtcNow;
+            if (!credentials.ExpiresAt.HasValue || credentials.ExpiresAt > now.AddMinutes(5)) return credentials;
+            lock (RenewNotBefore)
+            {
+                DateTimeOffset notBefore;
+                if (RenewNotBefore.TryGetValue(credentials.ConfigDirectory, out notBefore) && now < notBefore) return credentials;
+                RenewNotBefore[credentials.ConfigDirectory] = now.AddMinutes(5);
+            }
+            string claude;
+            try { claude = AccountLogin.ClaudePath(); }
+            catch (UsageException) { return credentials; }
+            var info = new ProcessStartInfo(claude, "auth status") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            if (credentials.HasExplicitHome) ApplyAccountEnvironment(info, false, credentials.ConfigDirectory);
+            else { info.WorkingDirectory = credentials.ConfigDirectory; info.EnvironmentVariables["CLAUDE_CONFIG_DIR"] = credentials.ConfigDirectory; }
+            try { RunRenewal(info); }
+            catch (System.ComponentModel.Win32Exception) { return credentials; }
+            catch (InvalidOperationException) { return credentials; }
+            return ReadCredentials(false, configDirectory);
+        }
+        static void RunHidden(ProcessStartInfo info)
+        {
+            using (var process = Process.Start(info))
+            {
+                process.StandardInput.Close();
+                var output = process.StandardOutput.ReadToEndAsync(); var errors = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(30000)) { try { process.Kill(); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { } }
+            }
+        }
         public static async Task<UsageSnapshot> FetchAsync(bool codex, Credentials credentials, CancellationToken cancellation)
         {
             var result = await (codex ? FetchCodexAsync(credentials, cancellation) : FetchClaudeAsync(credentials, cancellation)).ConfigureAwait(false);

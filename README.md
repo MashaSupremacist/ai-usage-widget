@@ -48,6 +48,8 @@ Claude is orange, Codex blue, Antigravity teal and Cursor silver. Bars and numbe
 - **··· → Background settings:** choose a background image, crop and zoom it, and set its transparency. You can also refresh readings here.
 - Scroll with the mouse wheel or drag the thin scroll thumb.
 
+Claude's sign-in renews itself. Claude Code's access token lasts about 8 hours. Shortly before it expires, the widget runs `claude auth status` with no window, and Claude Code renews its own sign-in. Codex renews through its `app-server` in the same way. Neither needs you to do anything.
+
 Antigravity only reports its limits while the app is running. When it's closed, the row keeps its last reading in muted text. The widget never refreshes the Cursor token. When the token expires, reconnect, or open Cursor.
 
 ## Privacy
@@ -57,7 +59,7 @@ Antigravity only reports its limits while the app is running. When it's closed, 
 - **Settings and caches:** these live in `%LOCALAPPDATA%\AIUsageWidget`. Usage caches and `accounts.json` hold no tokens.
 - **Extra accounts:** extra Claude and Codex logins live under `accounts\<random-id>`, where the official CLI writes its own credentials.
 - **Cursor browser sign-in:** its token is stored in `accounts\<random-id>\cursor-auth.dat`, encrypted with Windows DPAPI for your user.
-- **Your own login files are never changed:** the widget only reads the original Claude, Codex and Cursor sign-in files.
+- **Your own login files are never changed by the widget:** it only reads the original Claude, Codex and Cursor sign-in files. When Claude's token renews, Claude Code itself rewrites its own file. The `claude auth status` run that triggers this sends no model request.
 - **Normal TLS validation:** internet requests use standard certificate checks. Antigravity's self-signed localhost certificate is accepted only for that one connection, and only after the widget confirms the Antigravity executable and its loopback port.
 
 ## Build from source

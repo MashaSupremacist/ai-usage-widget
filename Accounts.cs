@@ -82,7 +82,7 @@ namespace UsageWidget
     }
     internal static class AccountLogin
     {
-        static string ClaudePath()
+        internal static string ClaudePath()
         {
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var directories = new List<string> { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "bin"), Path.Combine(local, "Programs", "Claude"), Path.Combine(local, "hermes", "node"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm") };

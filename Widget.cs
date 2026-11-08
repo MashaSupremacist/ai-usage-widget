@@ -567,7 +567,7 @@ namespace UsageWidget
             {
                 Credentials credentials = null; AntigravityConnection connection = null; string identity;
                 string home = view.Source == null ? null : view.Source.ConfigDirectory;
-                Func<Credentials> read = () => view.Cursor ? CursorClient.ReadCredentials(home) : UsageClient.ReadCredentials(view.Codex, home);
+                Func<Credentials> read = () => view.Cursor ? CursorClient.ReadCredentials(home) : view.Codex ? UsageClient.ReadCredentials(true, home) : UsageClient.ReadClaudeCredentials(home);
                 if (view.Antigravity) { connection = await Task.Run(() => AntigravityClient.ConnectAsync(cancellation.Token)); identity = connection.Identity; }
                 else {
                     credentials = await Task.Run(read);

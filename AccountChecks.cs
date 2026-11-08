@@ -64,6 +64,28 @@ namespace UsageWidget
                 check(UsageParser.PlanFromClaudeProfile("{\"organization\":{\"organization_type\":\"claude_pro\"}}") == "Pro", "Current Claude organization plan was ignored");
                 check(UsageParser.PlanFromClaudeProfile("{\"organization\":{\"organization_type\":\"new_plan\",\"rate_limit_tier\":200}}") == null, "Claude quota tier invented a plan");
             }));
+            run("expired Claude sign-in is renewed by Claude Code itself, throttled", () => WithDirectory(directory => {
+                string file = Path.Combine(directory, ".credentials.json");
+                Func<string, double, string> credentials = (token, hours) => "{\"claudeAiOauth\":{\"accessToken\":\"" + token + "\",\"expiresAt\":" + DateTimeOffset.UtcNow.AddHours(hours).ToUnixTimeMilliseconds() + "}}";
+                var calls = new List<ProcessStartInfo>();
+                try { AccountLogin.ClaudePath(); }
+                catch (UsageException) { Console.WriteLine("  (Claude Code not installed; renewal check skipped)"); return; }
+                var original = UsageClient.RunRenewal;
+                UsageClient.RunRenewal = info => { calls.Add(info); File.WriteAllText(file, credentials("renewed", 8)); };
+                try
+                {
+                    File.WriteAllText(file, credentials("fresh", 2));
+                    check(UsageClient.ReadClaudeCredentials(directory).AccessToken == "fresh" && calls.Count == 0, "Valid sign-in started a renewal");
+                    File.WriteAllText(file, credentials("expired", -1));
+                    var renewed = UsageClient.ReadClaudeCredentials(directory);
+                    check(calls.Count == 1 && renewed.AccessToken == "renewed", "Expired Claude sign-in was not renewed");
+                    check(calls[0].Arguments == "auth status" && Path.GetFileName(calls[0].FileName) == "claude.exe" && calls[0].CreateNoWindow && !calls[0].UseShellExecute, "Renewal is not a hidden claude auth status run");
+                    check(String.Equals(calls[0].EnvironmentVariables["CLAUDE_CONFIG_DIR"], Path.GetFullPath(directory), StringComparison.OrdinalIgnoreCase), "Renewal targeted the wrong Claude profile");
+                    File.WriteAllText(file, credentials("expired-again", -1));
+                    check(UsageClient.ReadClaudeCredentials(directory).AccessToken == "expired-again" && calls.Count == 1, "Failed renewals are retried without a cooldown");
+                }
+                finally { UsageClient.RunRenewal = original; }
+            }));
             run("extra account metadata has an isolated validated profile model", () => {
                 var model = typeof(UsageClient).Assembly.GetType("UsageWidget.AccountProfile");
                 check(model != null, "Additional account profile model is missing");
