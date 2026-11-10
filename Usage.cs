@@ -249,8 +249,8 @@ namespace UsageWidget
         }
         static readonly Dictionary<string, DateTimeOffset> RenewNotBefore = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
         internal static Action<ProcessStartInfo> RunRenewal = RunHidden;
-        // Claude's access token lasts about 8 hours. Claude Code renews it (and rewrites its own sign-in file) whenever it
-        // starts, including for `claude auth status`, which makes no model request. The widget never writes that file itself.
+        // Claude's access token lasts about 8 hours. Claude Code renews it (and rewrites its own sign-in file) for
+        // `claude auth status`, which makes no model request. The widget never writes that file itself.
         public static Credentials ReadClaudeCredentials(string configDirectory)
         {
             var credentials = ReadCredentials(false, configDirectory);
@@ -268,6 +268,10 @@ namespace UsageWidget
             var info = new ProcessStartInfo(claude, "auth status") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
             if (credentials.HasExplicitHome) ApplyAccountEnvironment(info, false, credentials.ConfigDirectory);
             else { info.WorkingDirectory = credentials.ConfigDirectory; info.EnvironmentVariables["CLAUDE_CONFIG_DIR"] = credentials.ConfigDirectory; }
+            // ponytail: undocumented Claude Code behaviour (2.1.3xx). Under the default "cli" entrypoint `auth status` only
+            // prints the cached login; under any other entrypoint it validates the login and renews an expired token.
+            // If a future version stops renewing, the row falls back to "Open Claude Code to renew sign-in".
+            info.EnvironmentVariables["CLAUDE_CODE_ENTRYPOINT"] = "ai-usage-widget";
             try { RunRenewal(info); }
             catch (System.ComponentModel.Win32Exception) { return credentials; }
             catch (InvalidOperationException) { return credentials; }
